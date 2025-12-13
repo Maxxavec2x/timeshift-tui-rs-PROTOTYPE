@@ -4,10 +4,10 @@ use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::Rect,
-    style::Stylize,
+    style::{Style, Stylize},
     symbols::border,
     text::{Line, Text},
-    widgets::{Block, Clear, Paragraph, Widget},
+    widgets::{Block, Clear, List, Paragraph, Widget},
 };
 use std::io;
 use timeshift_lib::Timeshift;
@@ -47,11 +47,30 @@ impl App {
         Ok(())
     }
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if key_event.kind != KeyEventKind::Press {
+            return;
+        }
         match key_event.code {
             KeyCode::Char('q') => self.exit = true,
             KeyCode::Esc => self.exit = true,
+            KeyCode::Char('j') | KeyCode::Down => self.select_next(),
+            KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
+            KeyCode::Char('g') | KeyCode::Home => self.select_first(),
+            KeyCode::Char('G') | KeyCode::End => self.select_last(),
             _ => {}
         }
+    }
+    fn select_previous(&mut self) {
+        todo!();
+    }
+    fn select_next(&mut self) {
+        todo!();
+    }
+    fn select_first(&mut self) {
+        todo!();
+    }
+    fn select_last(&mut self) {
+        todo!();
     }
 }
 
@@ -71,15 +90,18 @@ impl Widget for &App {
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
 
-        let main_content = Text::from(
-            self.snapshot_list
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join("\n"),
-        );
+        // Conversion en string pour le rendering
+        let items: Vec<String> = self.snapshot_list.iter().map(|s| s.to_string()).collect();
 
-        Paragraph::new(main_content).block(block).render(area, buf);
+        let snapshot_list_widget = List::new(items)
+            .block(Block::bordered().title("Snapshot List"))
+            .highlight_style(Style::new().reversed())
+            .highlight_symbol(">>")
+            .repeat_highlight_symbol(true);
+
+        //Paragraph::new().block(block).render(area, buf);
+        block.render(area, buf);
+        snapshot_list_widget.render(area, buf);
     }
 }
 
