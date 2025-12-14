@@ -2,7 +2,8 @@ use chrono::NaiveDateTime;
 use std::fmt;
 use std::process::Command;
 use std::str;
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)] // We cannot use the copy trait because there is a String in our
+// struct (:/)
 pub struct Snapshot {
     num: u8,
 
@@ -40,12 +41,34 @@ impl fmt::Display for Snapshot {
 #[derive(Debug, Default)]
 pub struct Timeshift {
     pub snapshots: Vec<Snapshot>,
+    pub current_snapshot_index: usize,
 }
 
 impl Timeshift {
     pub fn new() -> Self {
         let snapshots = Self::get_snapshots();
-        Timeshift { snapshots }
+        Timeshift {
+            snapshots,
+            ..Default::default()
+        }
+    }
+
+    pub fn init_current_snapshot(&mut self) {
+        if !self.snapshots.is_empty() {
+            self.current_snapshot_index = 0;
+        }
+    }
+
+    pub fn get_current_snapshot(&self) -> Snapshot {
+        self.snapshots[self.current_snapshot_index].clone()
+        // It would be better  to use a reference to the currnt
+        // snapshot, but since im a noob i will just use the clone
+        // trait (snapshot uses String)
+        // : https://users.rust-lang.org/t/rust-noob-asks-lifetime-of-a-reference-in-a-struct/47808/3
+    }
+
+    pub fn get_current_snapshot_index(&self) -> usize {
+        self.current_snapshot_index
     }
     pub fn get_snapshots() -> Vec<Snapshot> {
         let mut result: Vec<Snapshot> = Vec::new();

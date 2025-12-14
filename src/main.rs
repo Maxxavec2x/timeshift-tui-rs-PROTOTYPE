@@ -4,25 +4,24 @@ use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::Rect,
-    style::{Style, Stylize},
+    style::{Color, Style, Stylize},
     symbols::border,
-    text::{Line, Text},
-    widgets::{Block, Clear, List, Paragraph, Widget},
+    text::Line,
+    widgets::{Block, Clear, List, ListItem, Widget},
 };
 use std::io;
 use timeshift_lib::Timeshift;
-
-use crate::timeshift_lib::Snapshot;
 
 #[derive(Debug, Default)]
 pub struct App {
     //Default permet de set les nombres à 0 et les booléens à false
     exit: bool,
-    snapshot_list: Vec<Snapshot>,
+    timeshift_instance: Timeshift,
 }
 impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        self.timeshift_instance.init_current_snapshot();
         while !self.exit {
             terminal.draw(|frame| self.draw_frame(frame))?;
             self.handle_events()?;
@@ -60,17 +59,45 @@ impl App {
             _ => {}
         }
     }
-    fn select_previous(&mut self) {
-        todo!();
-    }
     fn select_next(&mut self) {
-        todo!();
+        if self.timeshift_instance.current_snapshot_index
+            < self.timeshift_instance.snapshots.len() - 1
+        {
+            self.timeshift_instance.current_snapshot_index += 1;
+        }
+    }
+    fn select_previous(&mut self) {
+        if self.timeshift_instance.current_snapshot_index > 0 {
+            self.timeshift_instance.current_snapshot_index -= 1;
+        }
     }
     fn select_first(&mut self) {
         todo!();
     }
     fn select_last(&mut self) {
         todo!();
+    }
+    fn render_snapshots(&self, area: Rect, buf: &mut Buffer) {
+        // Conversion en string pour le rendering
+        let items: Vec<ListItem> = self
+            .timeshift_instance
+            .snapshots
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                if i == self.timeshift_instance.current_snapshot_index {
+                    ListItem::from(s.to_string()).bg(Color::Blue)
+                } else {
+                    ListItem::from(s.to_string())
+                }
+            })
+            .collect();
+        let snapshot_list_widget = List::new(items)
+            .block(Block::bordered().title("Snapshot List"))
+            .highlight_style(Style::new().reversed())
+            .highlight_symbol(">>")
+            .repeat_highlight_symbol(true);
+        snapshot_list_widget.render(area, buf);
     }
 }
 
@@ -89,25 +116,16 @@ impl Widget for &App {
             .title(title.centered())
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
-
-        // Conversion en string pour le rendering
-        let items: Vec<String> = self.snapshot_list.iter().map(|s| s.to_string()).collect();
-
-        let snapshot_list_widget = List::new(items)
-            .block(Block::bordered().title("Snapshot List"))
-            .highlight_style(Style::new().reversed())
-            .highlight_symbol(">>")
-            .repeat_highlight_symbol(true);
-
         //Paragraph::new().block(block).render(area, buf);
+        self.render_snapshots(area, buf);
         block.render(area, buf);
-        snapshot_list_widget.render(area, buf);
     }
 }
 
 fn main() -> io::Result<()> {
+    let timeshift = Timeshift::new();
     let mut app: App = App {
-        snapshot_list: Timeshift::new().snapshots,
+        timeshift_instance: timeshift,
         ..Default::default()
     };
     let mut terminal = ratatui::init();
