@@ -18,7 +18,7 @@ pub struct App {
     exit: bool,
     timeshift_instance: Timeshift,
     current_snapshot_index: usize, //représente la snapshot selectionnée
-    current_device: String,        // Représente le device selectionné
+    current_device_name: String,   // Représente le device selectionné
 }
 impl App {
     /// runs the application's main loop until the user quits
@@ -62,7 +62,9 @@ impl App {
         }
     }
     fn select_next(&mut self) {
-        if self.current_snapshot_index < self.timeshift_instance.snapshots.len() - 1 {
+        if self.current_snapshot_index
+            < self.timeshift_instance.devices_map_by_name[&self.current_device_name].len() - 1
+        {
             self.current_snapshot_index += 1;
         }
     }
@@ -75,14 +77,14 @@ impl App {
         self.current_snapshot_index = 0;
     }
     fn select_last(&mut self) {
-        self.current_snapshot_index = self.timeshift_instance.snapshots.len() - 1;
+        self.current_snapshot_index =
+            self.timeshift_instance.devices_map_by_name[&self.current_device_name].len() - 1;
     }
 
-    fn render_snapshots(&self, area: Rect, buf: &mut Buffer) {
+    fn render_snapshots(&self, area: Rect, buf: &mut Buffer, current_device_name: String) {
         // Conversion en string pour le rendering
-        let items: Vec<ListItem> = self
-            .timeshift_instance
-            .snapshots
+        let items: Vec<ListItem> = self.timeshift_instance.devices_map_by_name
+            [&current_device_name]
             .iter()
             .enumerate()
             .map(|(i, s)| {
@@ -93,6 +95,7 @@ impl App {
                 }
             })
             .collect();
+        println!("ITEMS : {:?}", items);
         let snapshot_list_widget = List::new(items)
             .block(Block::bordered().title("Snapshot List"))
             .highlight_style(Style::new().reversed())
@@ -105,19 +108,20 @@ impl App {
         // Conversion en string pour le rendering
         let items: Vec<ListItem> = self
             .timeshift_instance
-            .snapshots
+            .devices_map
             .iter()
             .enumerate()
             .map(|(i, s)| {
+                // S est un tuple (Device, Vec<Snapshot>)
                 if i == self.current_snapshot_index {
-                    ListItem::from(s.to_string()).bg(Color::Blue)
+                    ListItem::from(s.0.to_string()).bg(Color::Blue)
                 } else {
-                    ListItem::from(s.to_string())
+                    ListItem::from(s.0.to_string())
                 }
             })
             .collect();
         let snapshot_list_widget = List::new(items)
-            .block(Block::bordered().title("Snapshot List"))
+            .block(Block::bordered().title("Device List"))
             .highlight_style(Style::new().reversed())
             .highlight_symbol(">>")
             .repeat_highlight_symbol(true);
@@ -141,7 +145,7 @@ impl Widget for &App {
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
         //Paragraph::new().block(block).render(area, buf);
-        self.render_snapshots(area, buf);
+        self.render_snapshots(area, buf, self.current_device_name.clone());
         block.render(area, buf);
     }
 }
@@ -150,6 +154,7 @@ fn main() -> io::Result<()> {
     let timeshift = Timeshift::new();
     let mut app: App = App {
         timeshift_instance: timeshift,
+        current_device_name: String::from("/dev/nvme0n1p2"),
         ..Default::default()
     };
     let mut terminal = ratatui::init();
