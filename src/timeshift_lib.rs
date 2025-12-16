@@ -97,7 +97,6 @@ impl Timeshift {
         let mut devices_map: HashMap<Device, Vec<Snapshot>> = HashMap::new();
         let mut devices_map_by_name: HashMap<String, Vec<Snapshot>> = HashMap::new();
         let devices: Vec<Device> = Self::get_devices();
-        println!("DEVICES : {:?}", devices);
         for device in devices {
             devices_map.insert(device.clone(), Self::get_snapshots(device.clone()));
             devices_map_by_name.insert(device.clone().device_name, Self::get_snapshots(device));
