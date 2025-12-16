@@ -12,6 +12,8 @@ use ratatui::{
 use std::io;
 use timeshift_lib::Timeshift;
 
+use crate::timeshift_lib::DeviceOrSnapshot;
+
 #[derive(Debug, Default)]
 pub struct App {
     //Default permet de set les nombres à 0 et les booléens à false
@@ -19,6 +21,7 @@ pub struct App {
     timeshift_instance: Timeshift,
     current_snapshot_index: usize, //représente la snapshot selectionnée
     current_device_name: String,   // Représente le device selectionné
+    currentDisplayScreen: String,
 }
 impl App {
     /// runs the application's main loop until the user quits
@@ -145,8 +148,9 @@ impl Widget for &App {
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
         //Paragraph::new().block(block).render(area, buf);
-        self.render_snapshots(area, buf, self.current_device_name.clone());
+        //self.render_snapshots(area, buf, self.current_device_name.clone());
         block.render(area, buf);
+        self.render_devices(area, buf);
     }
 }
 
