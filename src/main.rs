@@ -1,18 +1,30 @@
 mod timeshift_lib;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use derive_setters::Setters;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
-    layout::Rect,
+    layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     symbols::border,
-    text::Line,
-    widgets::{Block, Clear, List, ListItem, Widget},
+    text::{Line, Text},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget, Wrap},
 };
 use std::io;
-use timeshift_lib::Timeshift;
+use timeshift_lib::{Timeshift, TimeshiftError};
 
-use crate::timeshift_lib::DeviceOrSnapshot;
+#[derive(Debug, Default, Setters)]
+struct Popup<'a> {
+    //Also stolen from https://ratatui.rs/recipes/render/overwrite-regions/, I still
+    //don't understand those lifetime things and i don't want to
+    #[setters(into)]
+    title: Line<'a>,
+    #[setters(into)]
+    content: Text<'a>,
+    border_style: Style,
+    title_style: Style,
+    style: Style,
+}
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -23,10 +35,12 @@ pub struct App {
     current_device_name: String, // Représente le device selectionné
     current_display_screen: String,
     device_names_ordered: Vec<String>, // Ordered list just for the display
+    show_delete_confirmation: bool,
 }
 impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        self.show_delete_confirmation = false;
         self.current_index = 0;
         self.current_display_screen = "Device".to_string();
         self.device_names_ordered = self
@@ -64,14 +78,34 @@ impl App {
         }
         match key_event.code {
             KeyCode::Char('q') => self.back_or_exit(),
-            KeyCode::Esc => self.exit = true,
             KeyCode::Char('j') | KeyCode::Down => self.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
             KeyCode::Char('g') | KeyCode::Home => self.select_first(),
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
+            KeyCode::Char('d') | KeyCode::Delete => self.show_delete_confirmation = true,
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                self.delete_current_snapshot().unwrap();
+                self.show_delete_confirmation = false;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                self.show_delete_confirmation = false;
+            }
             KeyCode::Enter => self.choose(),
             _ => {}
         }
+    }
+
+    fn delete_current_snapshot(&mut self) -> Result<(), TimeshiftError> {
+        if self.current_display_screen == "Snapshot" {
+            let snapshot_to_delete = &self.timeshift_instance.devices_map_by_name
+                [&self.current_device_name.clone()][self.current_index];
+            match Timeshift::delete_snapshot(&snapshot_to_delete.name) {
+                Ok(_) => Ok::<(), ()>(()), //wtf is this, rust compiler told me to do it its not me
+                //i swear
+                Err(_) => return Err(TimeshiftError::DeleteError),
+            };
+        }
+        Ok(())
     }
 
     fn back_or_exit(&mut self) {
@@ -195,6 +229,48 @@ impl App {
             .repeat_highlight_symbol(true);
         snapshot_list_widget.render(area, buf);
     }
+
+    fn render_delete_confirmation(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        current_device_name: String,
+    ) {
+        let popup_area = center(
+            area,
+            Constraint::Percentage(20),
+            Constraint::Length(3), // top and bottom border + content
+        );
+        let snapshot_name =
+            &self.timeshift_instance.devices_map_by_name[&current_device_name][self.current_index];
+
+        let popup = Popup::default()
+            .title("⚠ Confirmation")
+            .title_style(Style::default().fg(Color::Yellow).bold())
+            .content(Text::from(vec![
+                Line::from(""),
+                Line::from(vec!["Voulez-vous vraiment supprimer".into()]),
+                Line::from(vec![
+                    "le snapshot ".into(),
+                    snapshot_name.to_string().yellow().bold(),
+                    " ?".into(),
+                ]),
+                Line::from(""),
+                Line::from("Cette action est irréversible.").style(Style::default().fg(Color::Red)),
+                Line::from(""),
+                Line::from(""),
+                Line::from(vec![
+                    " Confirmer ".into(),
+                    " <Y> ".green().bold(),
+                    "  Annuler ".into(),
+                    " <N/Esc> ".red().bold(),
+                ]),
+            ]))
+            .border_style(Style::default().fg(Color::Yellow))
+            .style(Style::default().bg(Color::Black));
+
+        popup.render(popup_area, buf);
+    }
 }
 
 impl Widget for &App {
@@ -210,9 +286,39 @@ impl Widget for &App {
             self.render_devices(area, buf);
         } else if self.current_display_screen == "Snapshot" {
             self.render_snapshots(area, buf, self.current_device_name.clone());
+            if self.show_delete_confirmation {
+                self.render_delete_confirmation(area, buf, self.current_device_name.clone());
+            }
         }
         //self.render_snapshots(area, buf, self.current_device_name.clone());
     }
+}
+
+// Component to make popup that I stole from rattatui documentation : https://ratatui.rs/recipes/render/overwrite-regions/
+impl Widget for Popup<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        // ensure that all cells under the popup are cleared to avoid leaking content
+        Clear.render(area, buf);
+        let block = Block::new()
+            .title(self.title)
+            .title_style(self.title_style)
+            .borders(Borders::ALL)
+            .border_style(self.border_style);
+        Paragraph::new(self.content)
+            .wrap(Wrap { trim: true })
+            .style(self.style)
+            .block(block)
+            .render(area, buf);
+    }
+}
+
+// Another utilitary fonction that i stole from the documentation : https://ratatui.rs/recipes/layout/center-a-widget/
+fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+    let [area] = Layout::horizontal([horizontal])
+        .flex(Flex::Center)
+        .areas(area);
+    let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+    area
 }
 
 fn main() -> io::Result<()> {
