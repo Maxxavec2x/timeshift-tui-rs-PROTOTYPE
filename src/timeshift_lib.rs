@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::process::Command;
@@ -7,7 +8,7 @@ use std::str;
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
 pub struct Device {
     num: u8,
-    device_name: String,
+    pub device_name: String,
     size: String,
     device_type: String, //should be an enum, will do it later
     label: String, // I legit don't know what that is, mine is always left blank on my system, and I
@@ -77,7 +78,7 @@ impl fmt::Display for Snapshot {
 #[derive(Debug, Default)]
 pub struct Timeshift {
     //why did i create such a monster
-    pub devices_map: HashMap<Device, Vec<Snapshot>>,
+    pub devices_map: IndexMap<Device, Vec<Snapshot>>,
     pub devices_map_by_name: HashMap<String, Vec<Snapshot>>,
 }
 
@@ -96,10 +97,10 @@ impl Timeshift {
     }
 
     pub fn fetch_info() -> (
-        HashMap<Device, Vec<Snapshot>>,
+        IndexMap<Device, Vec<Snapshot>>,
         HashMap<String, Vec<Snapshot>>,
     ) {
-        let mut devices_map: HashMap<Device, Vec<Snapshot>> = HashMap::new();
+        let mut devices_map: IndexMap<Device, Vec<Snapshot>> = IndexMap::new();
         let mut devices_map_by_name: HashMap<String, Vec<Snapshot>> = HashMap::new();
         let devices: Vec<Device> = Self::get_devices();
         for device in devices {

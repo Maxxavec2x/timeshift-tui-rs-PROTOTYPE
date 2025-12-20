@@ -34,7 +34,6 @@ pub struct App {
     current_index: usize,
     current_device_name: String, // Représente le device selectionné
     current_display_screen: String,
-    device_names_ordered: Vec<String>, // Ordered list just for the display
     show_delete_confirmation: bool,
 }
 impl App {
@@ -43,12 +42,6 @@ impl App {
         self.show_delete_confirmation = false;
         self.current_index = 0;
         self.current_display_screen = "Device".to_string();
-        self.device_names_ordered = self
-            .timeshift_instance
-            .devices_map_by_name
-            .keys()
-            .cloned()
-            .collect();
         while !self.exit {
             terminal.draw(|frame| self.draw_frame(frame))?;
             self.handle_events()?;
@@ -99,7 +92,9 @@ impl App {
         if self.current_display_screen == "Snapshot" {
             let snapshot_to_delete = &self.timeshift_instance.devices_map_by_name
                 [&self.current_device_name.clone()][self.current_index];
+            // On créé un thread pour delete le snapshot, et on attend la fin du tread
             Timeshift::delete_snapshot(&snapshot_to_delete.name).expect("Erreur deleting snapshot"); // I use the type because the function delete_snapshot doesnt take the &mut self, i simply juste refetch
+
             self.update_snapshot_list();
         }
     }
@@ -120,11 +115,12 @@ impl App {
     fn choose(&mut self) {
         if self.current_display_screen == "Device" {
             // Récupère la clé à l'index actuel
-            if let Some(device_name) = self.device_names_ordered.get(self.current_index) {
-                self.current_device_name = device_name.clone();
-                self.current_display_screen = "Snapshot".to_string();
-                self.current_index = 0; // Reset pour les snapshots
-            }
+            let device_name = self.timeshift_instance.devices_map.keys()[self.current_index]
+                .device_name
+                .clone();
+            self.current_device_name = device_name.clone();
+            self.current_display_screen = "Snapshot".to_string();
+            self.current_index = 0; // Reset pour les snapshots
         }
     }
 
