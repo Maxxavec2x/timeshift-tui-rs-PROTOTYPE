@@ -208,12 +208,14 @@ impl Timeshift {
         result
     }
 
-    pub fn delete_snapshot(snapshot_name: &str) -> Result<()> {
+    pub fn delete_snapshot(snapshot_name: &str, snapshot_device: &str) -> Result<()> {
         let output = Command::new("sudo")
             .arg("timeshift")
             .arg("--delete")
             .arg("--snapshot")
             .arg(snapshot_name)
+            .arg("--snapshot-device")
+            .arg(snapshot_device)
             .output()
             .context("Failed to execute timeshift command")?;
 
