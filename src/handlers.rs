@@ -26,8 +26,10 @@ impl App {
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
             KeyCode::Char('d') | KeyCode::Delete => self.show_delete_confirmation = true,
             KeyCode::Char('y') | KeyCode::Char('Y') => {
-                self.delete_current_snapshot();
-                self.show_delete_confirmation = false;
+                if self.show_delete_confirmation {
+                    self.delete_current_snapshot();
+                    self.show_delete_confirmation = false;
+                }
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                 self.show_delete_confirmation = false;
