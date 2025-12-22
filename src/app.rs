@@ -85,6 +85,7 @@ impl App {
                         // Succès
                         self.is_deleting = false;
                         self.update_snapshot_list();
+                        self.current_index = 0;
                     }
                     Ok(Err(e)) => {
                         // Erreur de suppression
