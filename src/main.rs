@@ -1,5 +1,5 @@
 mod timeshift_lib;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, poll};
 use derive_setters::Setters;
 use ratatui::{
     DefaultTerminal, Frame,
@@ -10,7 +10,9 @@ use ratatui::{
     text::{Line, Text},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget, Wrap},
 };
-use std::{io, thread};
+use std::{io, thread::JoinHandle};
+use std::{thread, time::Duration};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use timeshift_lib::Timeshift;
 
 #[derive(Debug, Default, Setters)]
@@ -35,16 +37,30 @@ pub struct App {
     current_device_name: String, // Représente le device selectionné
     current_display_screen: String,
     show_delete_confirmation: bool,
+    is_deleting: bool,
+    deletion_thread: Option<JoinHandle<Result<(), String>>>,
+    throbber_state: ThrobberState,
 }
 impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        self.is_deleting = false;
         self.show_delete_confirmation = false;
         self.current_index = 0;
         self.current_display_screen = "Device".to_string();
         while !self.exit {
+            if self.is_deleting {
+                self.throbber_state.calc_next();
+                // un peu ghetto de le mettre là j'imagine, mais au point où on
+                // en est...
+                self.check_deletion_status();
+            }
             terminal.draw(|frame| self.draw_frame(frame))?;
-            self.handle_events()?;
+            if poll(Duration::from_millis(20))? {
+                self.handle_events()?; // L'appel a event::read est bloquant, on le met donc dans un
+                // poll. Le fait que je ne suis pas parti sur une appli multithreadé dès le début
+                // conduit à des conneries comme ça
+            }
         }
         Ok(())
     }
@@ -87,18 +103,48 @@ impl App {
             _ => {}
         }
     }
-
+    fn check_deletion_status(&mut self) {
+        if let Some(handle) = self.deletion_thread.take() {
+            if handle.is_finished() {
+                match handle.join() {
+                    Ok(Ok(())) => {
+                        // Succès
+                        self.is_deleting = false;
+                        self.update_snapshot_list();
+                    }
+                    Ok(Err(e)) => {
+                        // Erreur de suppression
+                        // TODO: Ajouter vrai gestion d'erreur
+                        self.is_deleting = false;
+                        eprint!("{:?}", e.to_string());
+                    }
+                    Err(_) => {
+                        // Thread panic
+                        self.is_deleting = false;
+                    }
+                }
+            } else {
+                // Remettre le handle si pas encore terminé
+                self.deletion_thread = Some(handle);
+            }
+        }
+    }
     fn delete_current_snapshot(&mut self) {
         if self.current_display_screen == "Snapshot" {
             let snapshot_to_delete = &self.timeshift_instance.devices_map_by_name
                 [&self.current_device_name.clone()][self.current_index];
-            // On créé un thread pour delete le snapshot, et on attend la fin du tread
-            //thread::spawn(|| {
-            Timeshift::delete_snapshot(&snapshot_to_delete.name, &self.current_device_name)
-                .expect("Erreur deleting snapshot");
-            //});
-
-            self.update_snapshot_list();
+            // On créé un thread pour delete le snapshot, et on attend la fin du tread.
+            // Pour faire ça, comme la closure capture self, on clone les valeurs utilisé par
+            // timeshift (c'est pas le plus opti, mais on est pas à ça près lol), et on les move
+            // dans la closure
+            let snapshot_name = snapshot_to_delete.clone();
+            let current_device = self.current_device_name.clone();
+            self.show_delete_confirmation = false;
+            self.is_deleting = true;
+            self.deletion_thread = Some(thread::spawn(move || {
+                Timeshift::delete_snapshot(&snapshot_name.name, &current_device)
+                    .map_err(|e| e.to_string())
+            }));
         }
     }
 
@@ -268,6 +314,31 @@ impl App {
 
         popup.render(popup_area, buf);
     }
+
+    fn render_deletion_progress(&self, area: Rect, buf: &mut Buffer) {
+        let popup_area = center(area, Constraint::Percentage(30), Constraint::Length(8));
+
+        let popup = Popup::default()
+            .title("⏳ Suppression en cours")
+            .title_style(Style::default().fg(Color::Cyan).bold())
+            .content(Text::from(vec![
+                Line::from(""),
+                Line::from("Suppression du snapshot...").centered(),
+                Line::from(""),
+                Line::from("Veuillez patienter").style(Style::default().fg(Color::Gray)),
+            ]))
+            .border_style(Style::default().fg(Color::Cyan))
+            .style(Style::default().bg(Color::Black));
+
+        popup.render(popup_area, buf);
+
+        // Render le throbber au centre
+        let throbber_area = center(popup_area, Constraint::Length(3), Constraint::Length(1));
+        let throbber = Throbber::default()
+            .label("")
+            .style(Style::default().fg(Color::Cyan));
+        throbber.render(throbber_area, buf);
+    }
 }
 
 impl Widget for &App {
@@ -284,6 +355,9 @@ impl Widget for &App {
             self.render_snapshots(area, buf, self.current_device_name.clone());
             if self.show_delete_confirmation {
                 self.render_delete_confirmation(area, buf, self.current_device_name.clone());
+            }
+            if self.is_deleting {
+                self.render_deletion_progress(area, buf);
             }
         }
     }
@@ -320,6 +394,7 @@ fn main() -> io::Result<()> {
     let timeshift = Timeshift::new();
     let mut app: App = App {
         timeshift_instance: timeshift,
+        throbber_state: ThrobberState::default(),
         ..Default::default()
     };
     let mut terminal = ratatui::init();
