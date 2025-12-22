@@ -10,3 +10,5 @@ chrono = "0.4.42"
 anyhow = "1.0.100"
 derive_setters = "0.1.8"
 indexmap = "2.12.1"
+throbber-widgets-tui = "0.9.0"
+
