@@ -10,7 +10,8 @@ use ratatui::{
     text::{Line, Text},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget, Wrap},
 };
-use std::{io, thread};
+use std::io;
+use std::thread;
 use timeshift_lib::Timeshift;
 
 #[derive(Debug, Default, Setters)]
@@ -92,12 +93,17 @@ impl App {
         if self.current_display_screen == "Snapshot" {
             let snapshot_to_delete = &self.timeshift_instance.devices_map_by_name
                 [&self.current_device_name.clone()][self.current_index];
-            // On créé un thread pour delete le snapshot, et on attend la fin du tread
-            //thread::spawn(|| {
-            Timeshift::delete_snapshot(&snapshot_to_delete.name, &self.current_device_name)
-                .expect("Erreur deleting snapshot");
-            //});
-
+            // On créé un thread pour delete le snapshot, et on attend la fin du tread.
+            // Pour faire ça, comme la closure capture self, on clone les valeurs utilisé par
+            // timeshift (c'est pas le plus opti, mais on est pas à ça près lol), et on les move
+            // dans la closure
+            let snapshot_name = snapshot_to_delete.clone();
+            let current_device = self.current_device_name.clone();
+            let handle = thread::spawn(move || {
+                Timeshift::delete_snapshot(&snapshot_name.name, &current_device)
+                    .expect("Erreur deleting snapshot");
+            });
+            handle.join().expect("Thread panicked");
             self.update_snapshot_list();
         }
     }
