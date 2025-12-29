@@ -65,8 +65,12 @@ impl App {
                     self.is_creating = false;
                 }
                 KeyCode::Enter => {
-                    Timeshift::create_snapshot(self.input.value_and_reset());
+                    Timeshift::create_snapshot(
+                        self.input.value_and_reset(),
+                        &self.current_device_name,
+                    );
                     self.is_creating = false;
+                    self.update_snapshot_list();
                 }
                 _ => {
                     self.input.handle_event(&Event::Key(key_event));
@@ -74,8 +78,12 @@ impl App {
             },
             InputMode::Normal => match key_event.code {
                 KeyCode::Enter => {
-                    Timeshift::create_snapshot(self.input.value_and_reset());
+                    Timeshift::create_snapshot(
+                        self.input.value_and_reset(),
+                        &self.current_device_name,
+                    );
                     self.is_creating = false;
+                    self.update_snapshot_list();
                 }
                 KeyCode::Esc => {
                     self.is_creating = false;
