@@ -2,6 +2,7 @@ use crate::timeshift_lib::Timeshift;
 use crate::ui::center;
 use ratatui::DefaultTerminal;
 use ratatui::Frame;
+use ratatui::crossterm::event;
 use ratatui::layout::Constraint;
 use ratatui::widgets::Clear;
 use ratatui::{
@@ -14,6 +15,8 @@ use ratatui::{
 };
 use std::io;
 use std::thread::JoinHandle;
+use std::time::Duration;
+use std::time::Instant;
 use throbber_widgets_tui::ThrobberState;
 use tui_input::Input;
 
@@ -76,13 +79,26 @@ impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         self.current_index = 0;
+        let tick_rate = Duration::from_millis(100); // I set a tickrate so the app can still update
+        // even if the user doesn't press a key
+
         while !self.exit {
+            let now = Instant::now();
+
             self.update();
             terminal.draw(|frame| {
                 self.draw_frame(frame);
             })?;
-            self.handle_events()?;
+
+            let timeout = tick_rate
+                .checked_sub(now.elapsed())
+                .unwrap_or(Duration::ZERO);
+
+            if event::poll(timeout)? {
+                self.handle_events()?;
+            }
         }
+
         Ok(())
     }
 
