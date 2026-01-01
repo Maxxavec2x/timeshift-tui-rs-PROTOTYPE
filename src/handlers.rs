@@ -47,7 +47,6 @@ impl App {
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
                     if let CurrentAction::SnapshotDeletionConfirmation = self.current_action {
                         self.delete_current_snapshot();
-                        self.current_action = CurrentAction::Idle;
                     }
                 }
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
@@ -82,6 +81,7 @@ impl App {
                 }
             },
             InputMode::Normal => match key_event.code {
+                // doesnt happend for now
                 KeyCode::Enter => {
                     Timeshift::create_snapshot(
                         self.input.value_and_reset(),
