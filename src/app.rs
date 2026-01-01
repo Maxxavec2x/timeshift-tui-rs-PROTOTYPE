@@ -1,8 +1,8 @@
 use crate::timeshift_lib::Timeshift;
 use crate::ui::center;
-use crossterm::event::poll;
 use ratatui::DefaultTerminal;
 use ratatui::Frame;
+use ratatui::crossterm::event;
 use ratatui::layout::Constraint;
 use ratatui::widgets::Clear;
 use ratatui::{
@@ -16,6 +16,7 @@ use ratatui::{
 use std::io;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use std::time::Instant;
 use throbber_widgets_tui::ThrobberState;
 use tui_input::Input;
 
@@ -26,11 +27,9 @@ pub struct App {
     pub current_index: usize,
     pub current_device_name: String,
     pub current_display_screen: Screen,
-    pub show_delete_confirmation: bool,
-    pub is_deleting: bool,
     pub deletion_thread: Option<JoinHandle<Result<(), String>>>,
     pub throbber_state: ThrobberState,
-    pub is_creating: bool,
+    pub current_action: CurrentAction,
     pub input_mode: InputMode,
     /// Current value of the input box
     pub input: Input,
@@ -43,14 +42,25 @@ pub enum InputMode {
     Editing,
 }
 
-// This enum represent the multiple screen of the TUI.
-// THis video opened my mind about how to handle things :
-// https://www.youtube.com/watch?v=z-0-bbc80JM
+/// This enum represent the multiple screen of the TUI.
+/// THis video opened my mind about how to handle things :
+/// https://www.youtube.com/watch?v=z-0-bbc80JM
 #[derive(Debug, Default)]
 pub enum Screen {
     #[default]
     DeviceScreen,
     SnapshotScreen,
+}
+
+/// This enum represent the action that is done by user
+#[derive(Debug, Default)]
+pub enum CurrentAction {
+    #[default]
+    Idle,
+    SnapshotCreation,
+    SnapshotDeletion,
+    SnapshotDeletionConfirmation, // Its not really an action done by the user, but its a state for
+                                  // the app
 }
 
 impl App {
@@ -60,8 +70,6 @@ impl App {
             timeshift_instance,
             current_index: 0,
             current_device_name: String::new(),
-            show_delete_confirmation: false,
-            is_deleting: false,
             deletion_thread: None,
             throbber_state: ThrobberState::default(),
             ..Default::default()
@@ -70,51 +78,61 @@ impl App {
 
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        self.is_deleting = false;
-        self.is_creating = false;
-        self.show_delete_confirmation = false;
         self.current_index = 0;
+        let tick_rate = Duration::from_millis(100); // I set a tickrate so the app can still update
+        // even if the user doesn't press a key
+
         while !self.exit {
-            if self.is_deleting {
-                self.throbber_state.calc_next();
-                // un peu ghetto de le mettre là j'imagine, mais au point où on
-                // en est...
-                self.check_deletion_status();
-            }
-            terminal.draw(|frame| self.draw_frame(frame))?;
-            if poll(Duration::from_millis(20))? {
-                self.handle_events()?; // L'appel a event::read est bloquant, on le met donc dans un
-                // poll. Le fait que je ne suis pas parti sur une appli multithreadé dès le début
-                // conduit à des conneries comme ça
+            let now = Instant::now();
+
+            self.update();
+            terminal.draw(|frame| {
+                self.draw_frame(frame);
+            })?;
+
+            let timeout = tick_rate
+                .checked_sub(now.elapsed())
+                .unwrap_or(Duration::ZERO);
+
+            if event::poll(timeout)? {
+                self.handle_events()?;
             }
         }
+
         Ok(())
     }
 
-    fn draw_frame(&self, frame: &mut Frame) {
-        frame.render_widget(Clear, frame.area());
-        frame.render_widget(self, frame.area());
-
-        // Im doing this here because i need the frame object to manage the cursor, but i don't
-        // want to refactor all my logic (yet). I should rewrite the App structure and rendering.
-        if self.is_creating {
-            let popup_area = center(
-                frame.area(),
-                Constraint::Percentage(30),
-                Constraint::Length(10),
-            );
-
-            let cursor = {
-                let mut buf = frame.buffer_mut();
-                self.render_creation_popup(popup_area, &mut buf)
-            };
-
-            if let Some(pos) = cursor {
-                frame.set_cursor_position((pos.x, pos.y));
-            }
+    fn update(&mut self) {
+        if let CurrentAction::SnapshotDeletion = self.current_action {
+            self.throbber_state.calc_next();
+            self.check_deletion_status();
         }
     }
 
+    fn draw_frame(&self, frame: &mut Frame) {
+        match self.current_action {
+            CurrentAction::SnapshotCreation => {
+                let popup_area = center(
+                    frame.area(),
+                    Constraint::Percentage(30),
+                    Constraint::Length(10),
+                );
+
+                let cursor = {
+                    let mut buf = frame.buffer_mut();
+                    self.render_creation_popup(popup_area, &mut buf)
+                };
+
+                if let Some(pos) = cursor {
+                    frame.set_cursor_position((pos.x, pos.y));
+                }
+            }
+            _ => {
+                frame.render_widget(Clear, frame.area());
+                frame.render_widget(self, frame.area());
+            }
+        }
+    }
     pub fn update_snapshot_list(&mut self) {
         self.timeshift_instance.update();
     }
@@ -125,19 +143,17 @@ impl App {
                 match handle.join() {
                     Ok(Ok(())) => {
                         // Succès
-                        self.is_deleting = false;
+                        self.current_action = CurrentAction::Idle;
                         self.update_snapshot_list();
                         self.current_index = 0;
                     }
                     Ok(Err(e)) => {
                         // Erreur de suppression
-                        // TODO: Ajouter vrai gestion d'erreur
-                        self.is_deleting = false;
-                        eprint!("{:?}", e.to_string());
+                        panic!("Error deleting snapshot : {:?}", e.to_string());
                     }
                     Err(_) => {
                         // Thread panic
-                        self.is_deleting = false;
+                        panic!("Thread error while deleting snapshot");
                     }
                 }
             } else {
@@ -159,11 +175,18 @@ impl Widget for &App {
             Screen::DeviceScreen => self.render_devices(area, buf),
             Screen::SnapshotScreen => {
                 self.render_snapshots(area, buf, self.current_device_name.clone());
-                if self.show_delete_confirmation {
-                    self.render_delete_confirmation(area, buf, self.current_device_name.clone());
-                }
-                if self.is_deleting {
-                    self.render_deletion_progress(area, buf);
+                match self.current_action {
+                    CurrentAction::SnapshotDeletionConfirmation => {
+                        self.render_delete_confirmation(
+                            area,
+                            buf,
+                            self.current_device_name.clone(),
+                        );
+                    }
+                    CurrentAction::SnapshotDeletion => {
+                        self.render_deletion_progress(area, buf);
+                    }
+                    _ => (),
                 }
             }
         }

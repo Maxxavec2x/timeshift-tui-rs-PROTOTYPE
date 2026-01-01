@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::app::CurrentAction;
 use crate::app::InputMode;
 use crate::app::Screen;
 use crate::timeshift_lib::Timeshift;
@@ -22,39 +23,40 @@ impl App {
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         // Si on est en mode création, on gère l'input différemment (c'est moche)
-        if self.is_creating {
-            self.handle_creation_key_event(key_event);
-            return;
-        }
-
-        match key_event.code {
-            KeyCode::Char('q') => self.back_or_exit(),
-            KeyCode::Char('j') | KeyCode::Down => self.select_next(),
-            KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
-            KeyCode::Char('g') | KeyCode::Home => self.select_first(),
-            KeyCode::Char('G') | KeyCode::End => self.select_last(),
-            KeyCode::Char('c') => {
-                if let Screen::SnapshotScreen = self.current_display_screen {
-                    self.is_creating = true;
-                    self.input_mode = crate::app::InputMode::Editing;
+        match self.current_action {
+            CurrentAction::SnapshotCreation => {
+                self.handle_creation_key_event(key_event);
+            }
+            _ => match key_event.code {
+                KeyCode::Char('q') => self.back_or_exit(),
+                KeyCode::Char('j') | KeyCode::Down => self.select_next(),
+                KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
+                KeyCode::Char('g') | KeyCode::Home => self.select_first(),
+                KeyCode::Char('G') | KeyCode::End => self.select_last(),
+                KeyCode::Char('c') => {
+                    if let Screen::SnapshotScreen = self.current_display_screen {
+                        self.current_action = CurrentAction::SnapshotCreation;
+                        self.input_mode = crate::app::InputMode::Editing;
+                    }
                 }
-            }
-            KeyCode::Char('d') | KeyCode::Delete => {
-                if let Screen::SnapshotScreen = self.current_display_screen {
-                    self.show_delete_confirmation = true
+                KeyCode::Char('d') | KeyCode::Delete => {
+                    if let Screen::SnapshotScreen = self.current_display_screen {
+                        self.current_action = CurrentAction::SnapshotDeletionConfirmation
+                    }
                 }
-            }
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
-                if self.show_delete_confirmation {
-                    self.delete_current_snapshot();
-                    self.show_delete_confirmation = false;
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    if let CurrentAction::SnapshotDeletionConfirmation = self.current_action {
+                        self.delete_current_snapshot();
+                    }
                 }
-            }
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                self.show_delete_confirmation = false;
-            }
-            KeyCode::Enter => self.choose(),
-            _ => {}
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                    if let CurrentAction::SnapshotDeletionConfirmation = self.current_action {
+                        self.current_action = CurrentAction::Idle;
+                    }
+                }
+                KeyCode::Enter => self.choose(),
+                _ => {}
+            },
         }
     }
 
@@ -63,7 +65,7 @@ impl App {
             InputMode::Editing => match key_event.code {
                 KeyCode::Esc => {
                     self.input_mode = InputMode::Normal;
-                    self.is_creating = false;
+                    self.current_action = CurrentAction::Idle;
                 }
                 KeyCode::Enter => {
                     Timeshift::create_snapshot(
@@ -71,7 +73,7 @@ impl App {
                         &self.current_device_name,
                     )
                     .expect("expected snapshot creation");
-                    self.is_creating = false;
+                    self.current_action = CurrentAction::Idle;
                     self.update_snapshot_list();
                 }
                 _ => {
@@ -79,17 +81,18 @@ impl App {
                 }
             },
             InputMode::Normal => match key_event.code {
+                // doesnt happend for now
                 KeyCode::Enter => {
                     Timeshift::create_snapshot(
                         self.input.value_and_reset(),
                         &self.current_device_name,
                     )
                     .expect("expected snapshot creation");
-                    self.is_creating = false;
+                    self.current_action = CurrentAction::Idle;
                     self.update_snapshot_list();
                 }
                 KeyCode::Esc => {
-                    self.is_creating = false;
+                    self.current_action = CurrentAction::Idle;
                     self.input.reset();
                 }
                 _ => {}
@@ -162,8 +165,7 @@ impl App {
             // dans la closure
             let snapshot_name = snapshot_to_delete.clone();
             let current_device = self.current_device_name.clone();
-            self.show_delete_confirmation = false;
-            self.is_deleting = true;
+            self.current_action = CurrentAction::SnapshotDeletion;
             self.deletion_thread = Some(thread::spawn(move || {
                 Timeshift::delete_snapshot(&snapshot_name.name, &current_device)
                     .map_err(|e| e.to_string())
