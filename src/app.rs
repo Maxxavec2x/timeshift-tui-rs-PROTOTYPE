@@ -25,12 +25,11 @@ pub struct App {
     pub timeshift_instance: Timeshift,
     pub current_index: usize,
     pub current_device_name: String,
-    pub current_display_screen: String,
+    pub current_display_screen: Screen,
     pub show_delete_confirmation: bool,
     pub is_deleting: bool,
     pub deletion_thread: Option<JoinHandle<Result<(), String>>>,
     pub throbber_state: ThrobberState,
-
     pub is_creating: bool,
     pub input_mode: InputMode,
     /// Current value of the input box
@@ -44,6 +43,16 @@ pub enum InputMode {
     Editing,
 }
 
+// This enum represent the multiple screen of the TUI.
+// THis video opened my mind about how to handle things :
+// https://www.youtube.com/watch?v=z-0-bbc80JM
+#[derive(Debug, Default)]
+pub enum Screen {
+    #[default]
+    DeviceScreen,
+    SnapshotScreen,
+}
+
 impl App {
     pub fn new(timeshift_instance: Timeshift) -> Self {
         Self {
@@ -51,7 +60,6 @@ impl App {
             timeshift_instance,
             current_index: 0,
             current_device_name: String::new(),
-            current_display_screen: "Device".to_string(),
             show_delete_confirmation: false,
             is_deleting: false,
             deletion_thread: None,
@@ -63,9 +71,9 @@ impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         self.is_deleting = false;
+        self.is_creating = false;
         self.show_delete_confirmation = false;
         self.current_index = 0;
-        self.current_display_screen = "Device".to_string();
         while !self.exit {
             if self.is_deleting {
                 self.throbber_state.calc_next();
@@ -147,16 +155,16 @@ impl Widget for &App {
             .title(title.centered())
             .border_set(border::THICK);
         block.render(area, buf);
-
-        if self.current_display_screen == "Device" {
-            self.render_devices(area, buf);
-        } else if self.current_display_screen == "Snapshot" {
-            self.render_snapshots(area, buf, self.current_device_name.clone());
-            if self.show_delete_confirmation {
-                self.render_delete_confirmation(area, buf, self.current_device_name.clone());
-            }
-            if self.is_deleting {
-                self.render_deletion_progress(area, buf);
+        match self.current_display_screen {
+            Screen::DeviceScreen => self.render_devices(area, buf),
+            Screen::SnapshotScreen => {
+                self.render_snapshots(area, buf, self.current_device_name.clone());
+                if self.show_delete_confirmation {
+                    self.render_delete_confirmation(area, buf, self.current_device_name.clone());
+                }
+                if self.is_deleting {
+                    self.render_deletion_progress(area, buf);
+                }
             }
         }
     }

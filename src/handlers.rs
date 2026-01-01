@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::app::InputMode;
+use crate::app::Screen;
 use crate::timeshift_lib::Timeshift;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use std::io;
@@ -33,13 +34,13 @@ impl App {
             KeyCode::Char('g') | KeyCode::Home => self.select_first(),
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
             KeyCode::Char('c') => {
-                if self.current_display_screen == "Snapshot" {
+                if let Screen::SnapshotScreen = self.current_display_screen {
                     self.is_creating = true;
                     self.input_mode = crate::app::InputMode::Editing;
                 }
             }
             KeyCode::Char('d') | KeyCode::Delete => {
-                if self.current_display_screen == "Snapshot" {
+                if let Screen::SnapshotScreen = self.current_display_screen {
                     self.show_delete_confirmation = true
                 }
             }
@@ -68,7 +69,8 @@ impl App {
                     Timeshift::create_snapshot(
                         self.input.value_and_reset(),
                         &self.current_device_name,
-                    );
+                    )
+                    .expect("expected snapshot creation");
                     self.is_creating = false;
                     self.update_snapshot_list();
                 }
@@ -81,7 +83,8 @@ impl App {
                     Timeshift::create_snapshot(
                         self.input.value_and_reset(),
                         &self.current_device_name,
-                    );
+                    )
+                    .expect("expected snapshot creation");
                     self.is_creating = false;
                     self.update_snapshot_list();
                 }
@@ -95,33 +98,35 @@ impl App {
     }
 
     fn back_or_exit(&mut self) {
-        if self.current_display_screen == "Device" {
-            self.exit = true;
-        } else {
-            self.input_mode = crate::app::InputMode::Normal;
-            self.current_display_screen = "Device".to_string();
-            self.current_index = 0; // Reset pour les snapshots
+        match self.current_display_screen {
+            Screen::DeviceScreen => self.exit = true,
+            Screen::SnapshotScreen => {
+                self.input_mode = crate::app::InputMode::Normal;
+                self.current_display_screen = Screen::DeviceScreen;
+                self.current_index = 0; // Reset pour les snapshots
+            }
         }
     }
 
     fn choose(&mut self) {
-        if self.current_display_screen == "Device" {
+        if let Screen::DeviceScreen = self.current_display_screen {
             // Récupère la clé à l'index actuel
             let device_name = self.timeshift_instance.devices_map.keys()[self.current_index]
                 .device_name
                 .clone();
             self.current_device_name = device_name.clone();
-            self.current_display_screen = "Snapshot".to_string();
+            self.current_display_screen = Screen::SnapshotScreen;
             self.current_index = 0; // Reset pour les snapshots
         }
     }
-    pub fn select_next(&mut self) {
-        let max = if self.current_display_screen == "Device" {
-            self.timeshift_instance.devices_map_by_name.keys().len() - 1
-        } else {
-            self.timeshift_instance.devices_map_by_name[&self.current_device_name].len() - 1
-        };
 
+    pub fn select_next(&mut self) {
+        let max = match self.current_display_screen {
+            Screen::DeviceScreen => self.timeshift_instance.devices_map_by_name.keys().len() - 1,
+            Screen::SnapshotScreen => {
+                self.timeshift_instance.devices_map_by_name[&self.current_device_name].len() - 1
+            }
+        };
         if self.current_index < max {
             self.current_index += 1;
         }
@@ -138,16 +143,17 @@ impl App {
     }
 
     pub fn select_last(&mut self) {
-        let max = if self.current_display_screen == "Device" {
-            self.timeshift_instance.devices_map_by_name.keys().len() - 1
-        } else {
-            self.timeshift_instance.devices_map_by_name[&self.current_device_name].len() - 1
+        let max = match self.current_display_screen {
+            Screen::DeviceScreen => self.timeshift_instance.devices_map_by_name.keys().len() - 1,
+            Screen::SnapshotScreen => {
+                self.timeshift_instance.devices_map_by_name[&self.current_device_name].len() - 1
+            }
         };
         self.current_index = max;
     }
 
     fn delete_current_snapshot(&mut self) {
-        if self.current_display_screen == "Snapshot" {
+        if let Screen::SnapshotScreen = self.current_display_screen {
             let snapshot_to_delete = &self.timeshift_instance.devices_map_by_name
                 [&self.current_device_name.clone()][self.current_index];
             // On créé un thread pour delete le snapshot, et on attend la fin du tread.
