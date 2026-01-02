@@ -1,6 +1,9 @@
 use crate::app::App;
 use crate::app::InputMode;
+use crate::ui::Popup;
+use crate::ui::center;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::text::Text;
 use ratatui::widgets::{Block, Paragraph};
 use ratatui::{
     buffer::Buffer,
@@ -8,6 +11,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Widget,
 };
+use throbber_widgets_tui::Throbber;
 
 pub struct CursorPosition {
     pub x: u16,
@@ -99,5 +103,29 @@ impl App {
         }
 
         None
+    }
+
+    pub fn render_creation_progress(&self, area: Rect, buf: &mut Buffer) {
+        let popup_area = center(area, Constraint::Percentage(30), Constraint::Length(8));
+
+        let popup = Popup::default()
+            .title("⏳ Creating... ")
+            .title_style(Style::default().fg(Color::Cyan).bold())
+            .content(Text::from(vec![
+                Line::from(""),
+                Line::from("Creating the snapshot...").centered(),
+                Line::from(""),
+                Line::from("Please wait").style(Style::default().fg(Color::Gray)),
+            ]))
+            .border_style(Style::default().fg(Color::Cyan))
+            .style(Style::default().bg(Color::Black));
+
+        popup.render(popup_area, buf);
+
+        let throbber_area = center(popup_area, Constraint::Length(3), Constraint::Length(1));
+        let throbber = Throbber::default()
+            .label("")
+            .style(Style::default().fg(Color::Cyan));
+        throbber.render(throbber_area, buf);
     }
 }

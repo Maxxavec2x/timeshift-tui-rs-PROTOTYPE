@@ -68,13 +68,13 @@ impl App {
                     self.current_action = CurrentAction::Idle;
                 }
                 KeyCode::Enter => {
-                    Timeshift::create_snapshot(
-                        self.input.value_and_reset(),
-                        &self.current_device_name,
-                    )
-                    .expect("expected snapshot creation");
-                    self.current_action = CurrentAction::Idle;
-                    self.update_snapshot_list();
+                    // TODO: Improve lifetime thingy.
+                    self.current_action = CurrentAction::SnapshotCreationPending;
+                    let comment = self.input.value_and_reset();
+                    let device_name = self.current_device_name.clone();
+                    self.operation_thread = Some(thread::spawn(move || {
+                        Timeshift::create_snapshot(comment, &device_name).map_err(|e| e.to_string())
+                    }));
                 }
                 _ => {
                     self.input.handle_event(&Event::Key(key_event));
@@ -83,13 +83,13 @@ impl App {
             InputMode::Normal => match key_event.code {
                 // doesnt happend for now
                 KeyCode::Enter => {
-                    Timeshift::create_snapshot(
-                        self.input.value_and_reset(),
-                        &self.current_device_name,
-                    )
-                    .expect("expected snapshot creation");
-                    self.current_action = CurrentAction::Idle;
-                    self.update_snapshot_list();
+                    // TODO: Improve lifetime thingy.
+                    self.current_action = CurrentAction::SnapshotCreationPending;
+                    let comment = self.input.value_and_reset();
+                    let device_name = self.current_device_name.clone();
+                    self.operation_thread = Some(thread::spawn(move || {
+                        Timeshift::create_snapshot(comment, &device_name).map_err(|e| e.to_string())
+                    }));
                 }
                 KeyCode::Esc => {
                     self.current_action = CurrentAction::Idle;
@@ -166,7 +166,7 @@ impl App {
             let snapshot_name = snapshot_to_delete.clone();
             let current_device = self.current_device_name.clone();
             self.current_action = CurrentAction::SnapshotDeletion;
-            self.deletion_thread = Some(thread::spawn(move || {
+            self.operation_thread = Some(thread::spawn(move || {
                 Timeshift::delete_snapshot(&snapshot_name.name, &current_device)
                     .map_err(|e| e.to_string())
             }));

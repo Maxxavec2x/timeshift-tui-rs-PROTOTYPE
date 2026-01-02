@@ -27,7 +27,8 @@ pub struct App {
     pub current_index: usize,
     pub current_device_name: String,
     pub current_display_screen: Screen,
-    pub deletion_thread: Option<JoinHandle<Result<(), String>>>,
+    pub operation_thread: Option<JoinHandle<Result<(), String>>>, // Threat that I use for creation
+    // and deletion
     pub throbber_state: ThrobberState,
     pub current_action: CurrentAction,
     pub input_mode: InputMode,
@@ -58,6 +59,7 @@ pub enum CurrentAction {
     #[default]
     Idle,
     SnapshotCreation,
+    SnapshotCreationPending,
     SnapshotDeletion,
     SnapshotDeletionConfirmation, // Its not really an action done by the user, but its a state for
                                   // the app
@@ -70,7 +72,7 @@ impl App {
             timeshift_instance,
             current_index: 0,
             current_device_name: String::new(),
-            deletion_thread: None,
+            operation_thread: None,
             throbber_state: ThrobberState::default(),
             ..Default::default()
         }
@@ -103,42 +105,42 @@ impl App {
     }
 
     fn update(&mut self) {
-        if let CurrentAction::SnapshotDeletion = self.current_action {
-            self.throbber_state.calc_next();
-            self.check_deletion_status();
+        match self.current_action {
+            CurrentAction::SnapshotCreationPending | CurrentAction::SnapshotDeletion => {
+                self.throbber_state.calc_next();
+                self.check_operation_status();
+            }
+            _ => (),
         }
     }
 
     fn draw_frame(&self, frame: &mut Frame) {
-        match self.current_action {
-            CurrentAction::SnapshotCreation => {
-                let popup_area = center(
-                    frame.area(),
-                    Constraint::Percentage(30),
-                    Constraint::Length(10),
-                );
+        frame.render_widget(Clear, frame.area());
 
-                let cursor = {
-                    let mut buf = frame.buffer_mut();
-                    self.render_creation_popup(popup_area, &mut buf)
-                };
+        let cursor = if let CurrentAction::SnapshotCreation = self.current_action {
+            let popup_area = center(
+                frame.area(),
+                Constraint::Percentage(30),
+                Constraint::Length(10),
+            );
+            frame.render_widget(self, frame.area());
+            self.render_creation_popup(popup_area, frame.buffer_mut())
+        } else {
+            frame.render_widget(self, frame.area());
+            None
+        };
 
-                if let Some(pos) = cursor {
-                    frame.set_cursor_position((pos.x, pos.y));
-                }
-            }
-            _ => {
-                frame.render_widget(Clear, frame.area());
-                frame.render_widget(self, frame.area());
-            }
+        if let Some(pos) = cursor {
+            frame.set_cursor_position((pos.x, pos.y));
         }
     }
+
     pub fn update_snapshot_list(&mut self) {
         self.timeshift_instance.update();
     }
 
-    fn check_deletion_status(&mut self) {
-        if let Some(handle) = self.deletion_thread.take() {
+    fn check_operation_status(&mut self) {
+        if let Some(handle) = self.operation_thread.take() {
             if handle.is_finished() {
                 match handle.join() {
                     Ok(Ok(())) => {
@@ -148,17 +150,25 @@ impl App {
                         self.current_index = 0;
                     }
                     Ok(Err(e)) => {
-                        // Erreur de suppression
-                        panic!("Error deleting snapshot : {:?}", e.to_string());
+                        match self.current_action {
+                            CurrentAction::SnapshotDeletion => {
+                                // Erreur de suppression
+                                panic!("Error deleting snapshot : {:?}", e.to_string());
+                            }
+                            CurrentAction::SnapshotCreationPending => {
+                                panic!("Error creating snapshot : {:?}", e.to_string());
+                            }
+                            _ => (),
+                        }
                     }
                     Err(_) => {
                         // Thread panic
-                        panic!("Thread error while deleting snapshot");
+                        panic!("Thread error while operating snapshot");
                     }
                 }
             } else {
                 // Remettre le handle si pas encore terminé
-                self.deletion_thread = Some(handle);
+                self.operation_thread = Some(handle);
             }
         }
     }
@@ -185,6 +195,9 @@ impl Widget for &App {
                     }
                     CurrentAction::SnapshotDeletion => {
                         self.render_deletion_progress(area, buf);
+                    }
+                    CurrentAction::SnapshotCreationPending => {
+                        self.render_creation_progress(area, buf);
                     }
                     _ => (),
                 }
