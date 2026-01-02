@@ -4,7 +4,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{Block, List, ListItem, Widget},
+    widgets::{Block, List, ListItem, Paragraph, Widget},
 };
 impl App {
     pub fn render_snapshots(&self, area: Rect, buf: &mut Buffer, current_device_name: String) {
@@ -29,7 +29,15 @@ impl App {
                 }
             })
             .collect();
-
+        if items.is_empty() {
+            let message = Paragraph::new("No snapshots on this device").block(
+                Block::bordered()
+                    .title("Snapshot List")
+                    .title_bottom(instructions.centered()),
+            );
+            message.render(area, buf);
+            return;
+        }
         let list = List::new(items)
             .block(
                 Block::bordered()
