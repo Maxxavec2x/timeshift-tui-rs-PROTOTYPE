@@ -6,6 +6,10 @@ A TUI for [Timeshift](https://github.com/linuxmint/timeshift), that allow user t
 ## About the project
 This project is written in glorious Rust, using the [Ratatui](https://ratatui.rs/) lib. I am currently learning Rust, and this is my first real project in this language, so please do not expect too much from it, and expect it to change a lot with every iteration.
 
+## Video
+https://github.com/user-attachments/assets/e15224ae-64f7-4a95-b83a-798111b42ec4
+
+
 ## Dependencies
 
 I develop this project using ```cargo 1.92.0 (344c4567c 2025-10-21) (Arch Linux rust 1:1.92.0-1)```.  
