@@ -1,14 +1,15 @@
 
 # Timeshift-tui-rs
 
-A TUI for [Timeshift](https://github.com/linuxmint/timeshift), that allow user to manage snapshots in a easier way than with the CLI. For now, I have only seen GUI for this, and as I use headless environments I needed a TUI. I'm convinced this can be an helpful tool for sysadmins.
+A TUI for [Timeshift](https://github.com/linuxmint/timeshift), that allow user to manage snapshots in a easier way than with the CLI. For now, I have only seen GUI for this, and as I use headless environments I needed a TUI. I'm convinced this can be an helpful tool for sysadmins. 
 
 ## About the project
-This project is written in glorious Rust, using the [Ratatui](https://ratatui.rs/) lib. I am currently learning Rust, and this is my first real project in this language, so please do not expect too much from it.
+This project is written in glorious Rust, using the [Ratatui](https://ratatui.rs/) lib. I am currently learning Rust, and this is my first real project in this language, so please do not expect too much from it, and expect it to change a lot with every iteration.
 
 ## Dependencies
 
-I develop this project using ```cargo 1.92.0 (344c4567c 2025-10-21) (Arch Linux rust 1:1.92.0-1)```
+I develop this project using ```cargo 1.92.0 (344c4567c 2025-10-21) (Arch Linux rust 1:1.92.0-1)```.  
+To send command to timeshift, I use my own API (timeshift-lib-rs in this repo), and for now it needs the `sudo` command.  
 I also use crates other than Ratatui, and I will list them all here once the project reaches a stable state.
 
 ## How to use
