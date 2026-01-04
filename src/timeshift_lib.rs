@@ -115,8 +115,7 @@ impl Timeshift {
     }
 
     pub fn get_snapshots(device: Device) -> Vec<Snapshot> {
-        let output = Command::new("sudo")
-            .arg("timeshift")
+        let output = Command::new("timeshift")
             .arg("--list")
             .arg("--snapshot-device")
             .arg(device.device_name)
@@ -134,8 +133,7 @@ impl Timeshift {
     }
 
     pub fn get_devices() -> Vec<Device> {
-        let output = Command::new("sudo")
-            .arg("timeshift")
+        let output = Command::new("timeshift")
             .arg("--list-devices")
             .output()
             .expect("Couldn't get device list");
@@ -209,8 +207,7 @@ impl Timeshift {
     }
 
     pub fn delete_snapshot(snapshot_name: &str, snapshot_device: &str) -> Result<()> {
-        let output = Command::new("sudo")
-            .arg("timeshift")
+        let output = Command::new("timeshift")
             .arg("--delete")
             .arg("--snapshot")
             .arg(snapshot_name)
@@ -232,8 +229,7 @@ impl Timeshift {
     }
 
     pub fn create_snapshot(comment: String, snapshot_device: &str) -> Result<()> {
-        let output = Command::new("sudo")
-            .arg("timeshift")
+        let output = Command::new("timeshift")
             .arg("--create")
             .arg("--comment")
             .arg(comment)

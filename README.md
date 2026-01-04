@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/e15224ae-64f7-4a95-b83a-798111b42ec4
 ## Dependencies
 
 I develop this project using ```cargo 1.92.0 (344c4567c 2025-10-21) (Arch Linux rust 1:1.92.0-1)```.  
-To send command to timeshift, I use my own API (timeshift-lib-rs in this repo), and for now it needs the `sudo` command.  
+To send command to timeshift, I use my own API (timeshift-lib-rs in this repo), and it sucks.   
 I also use crates other than Ratatui, and I will list them all here once the project reaches a stable state.
 
 ## How to use
